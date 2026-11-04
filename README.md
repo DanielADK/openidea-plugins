@@ -92,6 +92,25 @@ A plugin must:
 release is reported in an issue; if no fixed version is listed within 30 days,
 it is delisted. Owners can hand a publisher over by adding owners.
 
+**New keys.** Add the new key first in `keys`, keep the old one, and let the
+old key vouch for the new one, so people who installed your plugins update to
+packages signed with the new key without being asked to confirm a change of
+signer:
+
+```sh
+openidea-plugin endorse "<new public key>" --key old.key --publisher alice
+```
+
+```toml
+keys = ["<new public key>", "<old public key>"]
+
+[endorsements]
+"<new public key>" = { key = "<old public key>", signature = "<signature it printed>" }
+```
+
+A lost or stolen key can't vouch for anything: ask for it to be revoked, and
+users confirm the new key when they next update.
+
 **Revocation.** Maintainers revoke plugin versions or keys (in `revoked.toml`
 or `revoked-keys`) for malware, a security problem the owner doesn't fix, or a
 lost key; OpenIDEA then disables them where they are installed. Owners ask for

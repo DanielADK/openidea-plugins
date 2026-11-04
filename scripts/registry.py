@@ -49,6 +49,8 @@ class Publisher:
     owners: list[str]
     keys: list[str]
     revoked_keys: list[str] = field(default_factory=list)
+    # endorsed key -> {"key": earlier key, "signature": ...} (`openidea-plugin endorse`)
+    endorsements: dict[str, dict] = field(default_factory=dict)
 
 
 @dataclass
@@ -103,7 +105,7 @@ def parse_publisher(stem: str, text: str) -> Publisher:
     if not PUBLISHER_ID.match(stem):
         raise Invalid(f"{where}: the publisher id (file name) must match {PUBLISHER_ID.pattern}")
     t = tomllib.loads(text)
-    unknown = set(t) - {"name", "owners", "keys", "revoked-keys"}
+    unknown = set(t) - {"name", "owners", "keys", "revoked-keys", "endorsements"}
     if unknown:
         raise Invalid(f"{where}: unknown keys {sorted(unknown)}")
     owners = _strings(t.get("owners"), f"{where}: `owners`")
@@ -118,7 +120,35 @@ def parse_publisher(stem: str, text: str) -> Publisher:
             raise Invalid(f"{where}: {key!r} is not an Ed25519 public key (32 bytes, base64)")
     if set(revoked) & set(keys):
         raise Invalid(f"{where}: a key is in both `keys` and `revoked-keys`")
-    return Publisher(stem, _string(t, "name", where), owners, keys, revoked)
+    endorsements = parse_endorsements(t.get("endorsements", {}), keys, revoked, where)
+    return Publisher(stem, _string(t, "name", where), owners, keys, revoked, endorsements)
+
+
+def parse_endorsements(table, keys: list[str], revoked: list[str], where: str) -> dict[str, dict]:
+    """`[endorsements]`: a listed key -> the earlier key vouching for it and its
+    signature, as `openidea-plugin endorse` prints them. OpenIDEA checks the
+    signature; plugins installed from packages signed with the earlier key
+    update to ones signed with the endorsed key without asking."""
+    if not isinstance(table, dict):
+        raise Invalid(f"{where}: `endorsements` is a table")
+    out = {}
+    for key, e in table.items():
+        at = f"{where}: endorsement of {key!r}"
+        if key not in keys:
+            raise Invalid(f"{at}: the endorsed key must be in `keys`")
+        if not isinstance(e, dict) or set(e) != {"key", "signature"}:
+            raise Invalid(f"{at}: needs `key` and `signature` (what `openidea-plugin endorse` prints)")
+        by, signature = e["key"], e["signature"]
+        if by == key or by not in keys + revoked:
+            raise Invalid(f"{at}: `key` must be another of the publisher's keys")
+        try:
+            valid = len(base64.b64decode(signature, validate=True)) == 64
+        except (ValueError, TypeError):
+            valid = False
+        if not valid:
+            raise Invalid(f"{at}: `signature` is not an Ed25519 signature (64 bytes, base64)")
+        out[key] = {"key": by, "signature": signature}
+    return out
 
 
 def parse_plugin(stem: str, text: str) -> Plugin:
@@ -303,6 +333,13 @@ def download(url: str) -> bytes | None:
     return data
 
 
+def _key_entry(p: Publisher, key: str, revoked: bool) -> dict:
+    entry = {"key": key, "revoked": revoked}
+    if key in p.endorsements:
+        entry["endorsement"] = p.endorsements[key]
+    return entry
+
+
 def index_skeleton(reg: Registry) -> dict:
     return {
         "format": 1,
@@ -310,8 +347,7 @@ def index_skeleton(reg: Registry) -> dict:
             {
                 "id": p.id,
                 "name": p.name,
-                "keys": [{"key": k, "revoked": False} for k in p.keys]
-                + [{"key": k, "revoked": True} for k in p.revoked_keys],
+                "keys": [_key_entry(p, k, False) for k in p.keys] + [_key_entry(p, k, True) for k in p.revoked_keys],
             }
             for p in reg.publishers.values()
         ],
