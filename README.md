@@ -29,7 +29,9 @@ repository, in `plugins/official/`.
    `cargo install --locked --git https://github.com/l0ng-ai/openidea ide-host --bin openidea-plugin`.
 2. Create your key once and keep the file secret:
    `openidea-plugin keygen alice.key` prints the public key.
-3. Name your plugin `<publisher>.<name>` in `plugin.toml`, build and sign it:
+3. Name your plugin `<publisher>.<name>` in `plugin.toml`, set its
+   `categories` (up to 3 of `languages`, `themes`, `icon-themes`, `linters`,
+   `vcs`, `ai`, `frameworks`, `tools`, `other`), build and sign it:
 
    ```sh
    openidea-plugin build
