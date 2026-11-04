@@ -1,0 +1,105 @@
+name: Registry
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Checks every listed plugin against the latest OpenIDEA release.
+  schedule:
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: registry-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+
+env:
+  OPENIDEA: l0ng-ai/openidea
+  MIRROR: https://github.com/${{ github.repository }}/releases/download/index
+
+jobs:
+  registry:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - name: Tests
+        run: python3 -m unittest discover -s scripts -q
+
+      # The base branch's script decides who may change what, not the pull request's.
+      - name: Entries and ownership
+        if: github.event_name == 'pull_request'
+        env:
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          git show "$BASE:scripts/registry.py" > scripts/.base_registry.py
+          python3 scripts/.base_registry.py validate --base "$BASE" --author "$AUTHOR"
+
+      - name: Entries
+        if: github.event_name != 'pull_request'
+        run: python3 scripts/registry.py validate
+
+      # The tool of the latest release (what users run); built from main until a release carries it.
+      - name: openidea-plugin
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          tag="$(gh release view --repo "$OPENIDEA" --json tagName -q .tagName)"
+          if gh release download "$tag" --repo "$OPENIDEA" -p openidea-plugin-linux-x86_64.gz -D "$RUNNER_TEMP"; then
+            gunzip -c "$RUNNER_TEMP/openidea-plugin-linux-x86_64.gz" > "$HOME/.local/bin/openidea-plugin"
+            chmod +x "$HOME/.local/bin/openidea-plugin"
+          else
+            cargo install --locked --git "https://github.com/$OPENIDEA" ide-host --bin openidea-plugin
+          fi
+          openidea-plugin --version
+
+      - name: Fetch, check and index the packages
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          python3 scripts/registry.py fetch out --mirror "$MIRROR"
+          for package in out/*.oiplugin; do
+            openidea-plugin check "$package"
+          done
+          openidea-plugin index out --out out/index.json
+
+      - name: Publish
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          DISPATCH_TOKEN: ${{ secrets.OPENIDEA_DISPATCH_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          if ! gh release view index >/dev/null 2>&1; then
+            gh release create index --title "Plugin index" --latest=false \
+              --notes "The community plugin index OpenIDEA merges into its marketplace. Generated; do not edit."
+          fi
+          gh release upload index out/*.oiplugin out/index.json --clobber
+          # Drop packages no longer listed.
+          keep="$(cd out && ls)"
+          gh release view index --json assets -q '.assets[].name' | while read -r asset; do
+            grep -qxF "$asset" <<<"$keep" || gh release delete-asset index "$asset" --yes
+          done
+          if [ -n "$DISPATCH_TOKEN" ]; then
+            GH_TOKEN="$DISPATCH_TOKEN" gh api "repos/$OPENIDEA/dispatches" -f event_type=community-plugins
+          fi
+
+      - name: Report a failed scheduled check
+        if: failure() && github.event_name == 'schedule'
+        run: |
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          open="$(gh issue list --label registry-check --state open --json number -q '.[0].number')"
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body "Still failing: $url"
+          else
+            gh label create registry-check --color B60205 --force
+            gh issue create --label registry-check --title "Scheduled registry check failed" \
+              --body "A listed plugin no longer passes against the latest OpenIDEA release, or its package is gone: $url"
+          fi

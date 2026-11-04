@@ -1,0 +1,351 @@
+#!/usr/bin/env python3
+"""The OpenIDEA plugin registry: checks entries and assembles the index.
+
+    registry.py validate --base REF --author LOGIN   # a pull request's changes
+    registry.py fetch OUT [--mirror URL]            # packages + index skeleton
+
+`fetch` downloads every listed package into OUT (from the mirror, the
+registry's own release, when it has the same bytes; else from the author's
+URL), checks each against its sha256, and writes OUT/index.json with the
+publishers and revocations. `openidea-plugin index OUT` then adds the plugins,
+checking each package's signature against those publishers.
+"""
+
+from __future__ import annotations
+
+import argparse
+import base64
+import hashlib
+import json
+import os
+import re
+import subprocess
+import sys
+import tomllib
+import urllib.error
+import urllib.request
+from dataclasses import dataclass, field
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+MAINTAINERS = {"l0ng-ai"}
+PUBLISHER_ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
+PLUGIN_NAME = re.compile(r"^[a-z0-9][a-z0-9_-]*(\.[a-z0-9][a-z0-9_-]*)*$")
+LOGIN = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})$")
+SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$")
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+MAX_PACKAGE = 256 << 20
+
+
+class Invalid(Exception):
+    pass
+
+
+@dataclass
+class Publisher:
+    id: str
+    name: str
+    owners: list[str]
+    keys: list[str]
+    revoked_keys: list[str] = field(default_factory=list)
+
+
+@dataclass
+class Plugin:
+    id: str
+    publisher: str
+    repository: str
+    version: str
+    package: str
+    sha256: str
+
+    @property
+    def file(self) -> str:
+        return f"{self.id}-{self.version}.oiplugin"
+
+
+@dataclass
+class Registry:
+    publishers: dict[str, Publisher]
+    plugins: dict[str, Plugin]
+    revoked: list[dict]
+
+
+def _strings(value, what: str) -> list[str]:
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        raise Invalid(f"{what} must be a list of strings")
+    return value
+
+
+def _string(table: dict, key: str, where: str) -> str:
+    value = table.get(key)
+    if not isinstance(value, str) or not value:
+        raise Invalid(f"{where}: `{key}` is required")
+    return value
+
+
+def _key_ok(key: str) -> bool:
+    try:
+        return len(base64.b64decode(key, validate=True)) == 32
+    except ValueError:
+        return False
+
+
+def parse_publisher(stem: str, text: str) -> Publisher:
+    where = f"publishers/{stem}.toml"
+    if not PUBLISHER_ID.match(stem):
+        raise Invalid(f"{where}: the publisher id (file name) must match {PUBLISHER_ID.pattern}")
+    t = tomllib.loads(text)
+    unknown = set(t) - {"name", "owners", "keys", "revoked-keys"}
+    if unknown:
+        raise Invalid(f"{where}: unknown keys {sorted(unknown)}")
+    owners = _strings(t.get("owners"), f"{where}: `owners`")
+    keys = _strings(t.get("keys"), f"{where}: `keys`")
+    revoked = _strings(t.get("revoked-keys", []), f"{where}: `revoked-keys`")
+    if not owners or not all(LOGIN.match(o) for o in owners):
+        raise Invalid(f"{where}: `owners` lists GitHub accounts")
+    if not keys:
+        raise Invalid(f"{where}: `keys` needs the public key `openidea-plugin keygen` printed")
+    for key in keys + revoked:
+        if not _key_ok(key):
+            raise Invalid(f"{where}: {key!r} is not an Ed25519 public key (32 bytes, base64)")
+    if set(revoked) & set(keys):
+        raise Invalid(f"{where}: a key is in both `keys` and `revoked-keys`")
+    return Publisher(stem, _string(t, "name", where), owners, keys, revoked)
+
+
+def parse_plugin(stem: str, text: str) -> Plugin:
+    where = f"plugins/{stem}.toml"
+    publisher, _, name = stem.partition(".")
+    if not PUBLISHER_ID.match(publisher) or not PLUGIN_NAME.match(name) or len(stem) > 64:
+        raise Invalid(f"{where}: the file name is the plugin id, `<publisher>.<name>`")
+    t = tomllib.loads(text)
+    unknown = set(t) - {"repository", "version", "package", "sha256"}
+    if unknown:
+        raise Invalid(f"{where}: unknown keys {sorted(unknown)}")
+    plugin = Plugin(
+        id=stem,
+        publisher=publisher,
+        repository=_string(t, "repository", where),
+        version=_string(t, "version", where),
+        package=_string(t, "package", where),
+        sha256=_string(t, "sha256", where).lower(),
+    )
+    if not plugin.repository.startswith("https://"):
+        raise Invalid(f"{where}: `repository` is the plugin's public source repository (https)")
+    if not plugin.package.startswith("https://"):
+        raise Invalid(f"{where}: `package` is an https URL of the .oiplugin")
+    if not SEMVER.match(plugin.version):
+        raise Invalid(f"{where}: `version` is the package's semver version")
+    if not SHA256.match(plugin.sha256):
+        raise Invalid(f"{where}: `sha256` is the package file's SHA-256, in hex")
+    return plugin
+
+
+def parse_revoked(text: str) -> list[dict]:
+    t = tomllib.loads(text)
+    out = []
+    for i, r in enumerate(t.get("plugin", [])):
+        where = f"revoked.toml: [[plugin]] {i + 1}"
+        out.append(
+            {
+                "id": _string(r, "id", where),
+                "versions": _strings(r.get("versions", []), f"{where}: `versions`"),
+                "reason": _string(r, "reason", where),
+            }
+        )
+    return out
+
+
+def load(files: dict[str, str]) -> Registry:
+    """The registry from {relative path: text}; raises Invalid with every problem."""
+    problems: list[str] = []
+    publishers: dict[str, Publisher] = {}
+    plugins: dict[str, Plugin] = {}
+    revoked: list[dict] = []
+    for path, text in sorted(files.items()):
+        p = Path(path)
+        try:
+            if p.parent.name == "publishers" and p.suffix == ".toml":
+                publishers[p.stem] = parse_publisher(p.stem, text)
+            elif p.parent.name == "plugins" and p.suffix == ".toml":
+                plugins[p.stem] = parse_plugin(p.stem, text)
+            elif path == "revoked.toml":
+                revoked = parse_revoked(text)
+        except (Invalid, tomllib.TOMLDecodeError) as e:
+            problems.append(f"{path}: {e}" if isinstance(e, tomllib.TOMLDecodeError) else str(e))
+    for plugin in plugins.values():
+        if plugin.publisher not in publishers:
+            problems.append(f"plugins/{plugin.id}.toml: no publishers/{plugin.publisher}.toml")
+    for r in revoked:
+        if r["id"].partition(".")[0] not in publishers:
+            problems.append(f"revoked.toml: {r['id']} is not a plugin of a listed publisher")
+    if problems:
+        raise Invalid("\n".join(problems))
+    return Registry(publishers, plugins, revoked)
+
+
+def registry_files(ref: str | None = None) -> dict[str, str]:
+    """The registry's files in the working tree, or at git `ref`."""
+    if ref is None:
+        out = {}
+        for d in ("publishers", "plugins"):
+            for f in (ROOT / d).glob("*.toml"):
+                out[f"{d}/{f.name}"] = f.read_text()
+        if (ROOT / "revoked.toml").is_file():
+            out["revoked.toml"] = (ROOT / "revoked.toml").read_text()
+        return out
+    names = git("ls-tree", "-r", "--name-only", ref, "--", "publishers", "plugins", "revoked.toml").split()
+    return {n: git("show", f"{ref}:{n}") for n in names if n.endswith(".toml")}
+
+
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True, text=True).stdout
+
+
+def review(base: Registry, head: Registry, changed: list[str], author: str) -> tuple[list[str], list[str]]:
+    """(problems, notes) of `author` changing `changed` from `base` to `head`.
+
+    Owners (as listed before the change) may change their publisher and its
+    plugins; anything else is the maintainers'. New publishers and new plugins
+    are noted for review.
+    """
+    problems: list[str] = []
+    notes: list[str] = []
+    maintainer = author in MAINTAINERS
+
+    def may_change(publisher: str, what: str) -> None:
+        if maintainer:
+            return
+        if publisher in base.publishers:
+            if author not in base.publishers[publisher].owners:
+                problems.append(f"{what}: @{author} is not an owner of publisher {publisher}")
+        elif publisher in head.publishers:
+            if author not in head.publishers[publisher].owners:
+                problems.append(f"{what}: a new publisher lists its author among its owners")
+        else:
+            problems.append(f"{what}: no publisher {publisher}")
+
+    for path in changed:
+        p = Path(path)
+        if p.parent.name == "publishers" and p.suffix == ".toml" and len(p.parts) == 2:
+            may_change(p.stem, path)
+            if p.stem not in base.publishers:
+                notes.append(f"new publisher `{p.stem}`")
+            elif p.stem not in head.publishers and not maintainer:
+                problems.append(f"{path}: only maintainers remove publishers")
+        elif p.parent.name == "plugins" and p.suffix == ".toml" and len(p.parts) == 2:
+            may_change(p.stem.partition(".")[0], path)
+            if p.stem not in base.plugins:
+                notes.append(f"new plugin `{p.stem}`")
+            elif p.stem in head.plugins:
+                notes.append(f"`{p.stem}` {base.plugins[p.stem].version} → {head.plugins[p.stem].version}")
+            else:
+                notes.append(f"`{p.stem}` delisted")
+        elif path.endswith(".gitkeep"):
+            pass
+        elif not maintainer:
+            problems.append(f"{path}: only maintainers change this file")
+    return problems, notes
+
+
+def cmd_validate(args) -> int:
+    try:
+        head = load(registry_files())
+    except Invalid as e:
+        print(e, file=sys.stderr)
+        return 1
+    if not args.base:
+        print(f"ok: {len(head.publishers)} publishers, {len(head.plugins)} plugins")
+        return 0
+    base = load(registry_files(args.base))
+    changed = git("diff", "--name-only", f"{args.base}...HEAD").split()
+    problems, notes = review(base, head, changed, args.author)
+    summary = ["### Registry changes", *(f"- {n}" for n in notes)]
+    if any(n.startswith("new ") for n in notes):
+        summary.append("\nNew publishers and plugins wait for a maintainer's review.")
+    summary += [f"- :x: {p}" for p in problems]
+    report = "\n".join(summary)
+    print(report)
+    if os.environ.get("GITHUB_STEP_SUMMARY"):
+        with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+            f.write(report + "\n")
+    return 1 if problems else 0
+
+
+def download(url: str) -> bytes | None:
+    request = urllib.request.Request(url, headers={"User-Agent": "openidea-plugin-registry"})
+    try:
+        with urllib.request.urlopen(request, timeout=60) as r:
+            data = r.read(MAX_PACKAGE + 1)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return None
+        raise
+    if len(data) > MAX_PACKAGE:
+        raise Invalid(f"{url}: larger than {MAX_PACKAGE >> 20} MiB")
+    return data
+
+
+def index_skeleton(reg: Registry) -> dict:
+    return {
+        "format": 1,
+        "publishers": [
+            {
+                "id": p.id,
+                "name": p.name,
+                "keys": [{"key": k, "revoked": False} for k in p.keys]
+                + [{"key": k, "revoked": True} for k in p.revoked_keys],
+            }
+            for p in reg.publishers.values()
+        ],
+        "plugins": [],
+        "revoked": reg.revoked,
+    }
+
+
+def cmd_fetch(args) -> int:
+    reg = load(registry_files())
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    failed = False
+    for plugin in reg.plugins.values():
+        data = download(f"{args.mirror.rstrip('/')}/{plugin.file}") if args.mirror else None
+        source = "mirror"
+        if data is None or hashlib.sha256(data).hexdigest() != plugin.sha256:
+            data, source = download(plugin.package), plugin.package
+        if data is None:
+            print(f"::error::{plugin.id}: {plugin.package} not found", file=sys.stderr)
+            failed = True
+            continue
+        if hashlib.sha256(data).hexdigest() != plugin.sha256:
+            print(f"::error::{plugin.id}: {plugin.package} doesn't match its sha256", file=sys.stderr)
+            failed = True
+            continue
+        (out / plugin.file).write_bytes(data)
+        print(f"{plugin.file} ({source})")
+    (out / "index.json").write_text(json.dumps(index_skeleton(reg), indent=2) + "\n")
+    return 1 if failed else 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    sub = parser.add_subparsers(dest="command", required=True)
+    v = sub.add_parser("validate", help="check the entries (and a pull request's changes with --base)")
+    v.add_argument("--base")
+    v.add_argument("--author", default="")
+    v.set_defaults(run=cmd_validate)
+    f = sub.add_parser("fetch", help="download the packages and write the index skeleton")
+    f.add_argument("out")
+    f.add_argument("--mirror")
+    f.set_defaults(run=cmd_fetch)
+    args = parser.parse_args()
+    try:
+        return args.run(args)
+    except Invalid as e:
+        print(e, file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
