@@ -25,6 +25,28 @@ class Load(unittest.TestCase):
         skeleton = r.index_skeleton(reg)
         self.assertEqual(skeleton["publishers"][0]["keys"], [{"key": KEY, "revoked": False}])
 
+    def test_endorsements_pass_into_the_index(self):
+        new = base64.b64encode(bytes([1]) * 32).decode()
+        sig = base64.b64encode(bytes(64)).decode()
+        text = (
+            f'name = "Alice"\nowners = ["alice"]\nkeys = ["{new}", "{KEY}"]\n'
+            f'[endorsements]\n"{new}" = {{ key = "{KEY}", signature = "{sig}" }}\n'
+        )
+        reg = r.load({"publishers/alice.toml": text})
+        keys = r.index_skeleton(reg)["publishers"][0]["keys"]
+        self.assertEqual(keys[0], {"key": new, "revoked": False, "endorsement": {"key": KEY, "signature": sig}})
+        self.assertEqual(keys[1], {"key": KEY, "revoked": False})
+        other = base64.b64encode(bytes([2]) * 32).decode()
+        for bad, expected in [
+            (f'[endorsements]\n"{KEY}" = {{ key = "{KEY}", signature = "{sig}" }}\n', "another of"),
+            (f'[endorsements]\n"{other}" = {{ key = "{KEY}", signature = "c2hvcnQ=" }}\n', "not an Ed25519 signature"),
+            (f'[endorsements]\n"{new}" = {{ key = "{KEY}", signature = "{sig}" }}\n', "must be in `keys`"),
+            (f'[endorsements]\n"{KEY}" = {{ key = "{new}" }}\n', "needs `key` and `signature`"),
+        ]:
+            with self.assertRaises(r.Invalid) as e:
+                r.load({"publishers/alice.toml": publisher().replace(f'["{KEY}"]', f'["{KEY}", "{other}"]') + bad})
+            self.assertIn(expected, str(e.exception))
+
     def test_problems_are_all_reported(self):
         files = {
             "publishers/Bad.toml": publisher(),
