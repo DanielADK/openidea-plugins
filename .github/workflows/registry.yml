@@ -65,7 +65,10 @@ jobs:
           set -euo pipefail
           shopt -s nullglob
           python3 scripts/registry.py fetch out --mirror "$MIRROR"
-          for package in out/*.oiplugin; do
+          packages=(out/*.oiplugin)
+          # No packages: the skeleton (publishers, revocations) is the index.
+          [ ${#packages[@]} -gt 0 ] || exit 0
+          for package in "${packages[@]}"; do
             openidea-plugin check "$package"
           done
           openidea-plugin index out --out out/index.json
