@@ -54,13 +54,20 @@ repository, in `plugins/official/`.
 
    ```toml
    repository = "https://github.com/alice/openidea-arthas"
+
+   [[versions]]
    version = "0.1.0"
    package = "https://github.com/alice/openidea-arthas/releases/download/v0.1.0/alice.arthas-0.1.0.oiplugin"
    sha256 = "<sha-256 of the package file>"
    ```
 
-A new version is a pull request that changes `version`, `package` and
-`sha256`. Removing the file delists the plugin (installed copies keep
+A new version is a pull request that adds a `[[versions]]` table. Keep the
+earlier ones: each version records the plugin API it needs (its
+`engines.openidea`, narrowed to the API its component was built for), and
+OpenIDEA installs the newest version it can load, so users of an older
+OpenIDEA keep getting the last version built for them. The index keeps only
+the newest version per API requirement, so a table you no longer need can go
+whenever you like. Removing the file delists the plugin (installed copies keep
 working).
 
 ## Rules

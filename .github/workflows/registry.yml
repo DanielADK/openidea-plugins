@@ -81,9 +81,11 @@ jobs:
             gh release create index --title "Plugin index" --latest=false \
               --notes "The community plugin index OpenIDEA merges into its marketplace. Generated; do not edit."
           fi
-          gh release upload index out/*.oiplugin out/index.json --clobber
+          # The packages the index lists (it keeps the newest version per plugin API requirement).
+          keep="$(python3 -c 'import json; [print(p["download"]) for p in json.load(open("out/index.json"))["plugins"]]')"
+          keep="$(printf '%s\nindex.json' "$keep")"
+          (cd out && xargs gh release upload index --clobber <<<"$keep")
           # Drop packages no longer listed.
-          keep="$(cd out && ls)"
           gh release view index --json assets -q '.assets[].name' | while read -r asset; do
             grep -qxF "$asset" <<<"$keep" || gh release delete-asset index "$asset" --yes
           done

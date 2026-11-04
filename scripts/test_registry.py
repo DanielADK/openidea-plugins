@@ -11,17 +11,17 @@ def publisher(owners='["alice"]'):
     return f'name = "Alice"\nowners = {owners}\nkeys = ["{KEY}"]\n'
 
 
-def plugin(version="0.1.0", package="https://example.com/a.oiplugin"):
-    return (
-        f'repository = "https://github.com/alice/arthas"\nversion = "{version}"\n'
-        f'package = "{package}"\nsha256 = "{SHA}"\n'
+def plugin(*versions, package="https://example.com/a.oiplugin"):
+    tables = "".join(
+        f'\n[[versions]]\nversion = "{v}"\npackage = "{package}"\nsha256 = "{SHA}"\n' for v in versions or ["0.1.0"]
     )
+    return 'repository = "https://github.com/alice/arthas"\n' + tables
 
 
 class Load(unittest.TestCase):
     def test_a_valid_registry(self):
         reg = r.load({"publishers/alice.toml": publisher(), "plugins/alice.arthas.toml": plugin()})
-        self.assertEqual(reg.plugins["alice.arthas"].file, "alice.arthas-0.1.0.oiplugin")
+        self.assertEqual(reg.plugins["alice.arthas"].versions[0].file, "alice.arthas-0.1.0.oiplugin")
         skeleton = r.index_skeleton(reg)
         self.assertEqual(skeleton["publishers"][0]["keys"], [{"key": KEY, "revoked": False}])
 
@@ -31,7 +31,9 @@ class Load(unittest.TestCase):
             "publishers/bob.toml": 'name = "Bob"\nowners = ["bob"]\nkeys = ["short"]\n',
             "plugins/carol.x.toml": plugin(),
             "plugins/alice.toml": plugin(),
-            "plugins/alice.y.toml": plugin(version="1"),
+            "plugins/alice.y.toml": plugin("1"),
+            "plugins/alice.w.toml": plugin("1.0.0", "1.0.0"),
+            "plugins/alice.v.toml": 'repository = "https://github.com/alice/v"\n',
             "plugins/alice.z.toml": plugin(package="http://example.com/z"),
             "publishers/alice.toml": publisher(),
             "revoked.toml": '[[plugin]]\nid = "dave.x"\nreason = "malware"\n',
@@ -45,6 +47,8 @@ class Load(unittest.TestCase):
             "no publishers/carol.toml",
             "plugins/alice.toml: the file name",
             "semver",
+            "listed twice",
+            "`[[versions]]` table",
             "https URL",
             "dave.x is not a plugin",
         ]:
@@ -55,10 +59,12 @@ class Review(unittest.TestCase):
     base = r.load({"publishers/alice.toml": publisher(), "plugins/alice.arthas.toml": plugin()})
 
     def test_owners_update_their_plugins(self):
-        head = r.load({"publishers/alice.toml": publisher(), "plugins/alice.arthas.toml": plugin("0.2.0")})
+        head = r.load(
+            {"publishers/alice.toml": publisher(), "plugins/alice.arthas.toml": plugin("0.2.0", "0.1.0")}
+        )
         problems, notes = r.review(self.base, head, ["plugins/alice.arthas.toml"], "alice")
         self.assertEqual(problems, [])
-        self.assertEqual(notes, ["`alice.arthas` 0.1.0 → 0.2.0"])
+        self.assertEqual(notes, ["`alice.arthas` +0.2.0"])
 
     def test_others_cannot_change_them_or_add_themselves_as_owners(self):
         head = r.load(

@@ -4,11 +4,12 @@
     registry.py validate --base REF --author LOGIN   # a pull request's changes
     registry.py fetch OUT [--mirror URL]            # packages + index skeleton
 
-`fetch` downloads every listed package into OUT (from the mirror, the
+`fetch` downloads every listed package version into OUT (from the mirror, the
 registry's own release, when it has the same bytes; else from the author's
 URL), checks each against its sha256, and writes OUT/index.json with the
 publishers and revocations. `openidea-plugin index OUT` then adds the plugins,
-checking each package's signature against those publishers.
+checking each package's signature against those publishers, and keeps of each
+plugin the newest version per plugin API requirement.
 """
 
 from __future__ import annotations
@@ -51,10 +52,8 @@ class Publisher:
 
 
 @dataclass
-class Plugin:
+class Version:
     id: str
-    publisher: str
-    repository: str
     version: str
     package: str
     sha256: str
@@ -62,6 +61,14 @@ class Plugin:
     @property
     def file(self) -> str:
         return f"{self.id}-{self.version}.oiplugin"
+
+
+@dataclass
+class Plugin:
+    id: str
+    publisher: str
+    repository: str
+    versions: list[Version]
 
 
 @dataclass
@@ -120,26 +127,32 @@ def parse_plugin(stem: str, text: str) -> Plugin:
     if not PUBLISHER_ID.match(publisher) or not PLUGIN_NAME.match(name) or len(stem) > 64:
         raise Invalid(f"{where}: the file name is the plugin id, `<publisher>.<name>`")
     t = tomllib.loads(text)
-    unknown = set(t) - {"repository", "version", "package", "sha256"}
+    unknown = set(t) - {"repository", "versions"}
     if unknown:
         raise Invalid(f"{where}: unknown keys {sorted(unknown)}")
-    plugin = Plugin(
-        id=stem,
-        publisher=publisher,
-        repository=_string(t, "repository", where),
-        version=_string(t, "version", where),
-        package=_string(t, "package", where),
-        sha256=_string(t, "sha256", where).lower(),
-    )
-    if not plugin.repository.startswith("https://"):
+    repository = _string(t, "repository", where)
+    if not repository.startswith("https://"):
         raise Invalid(f"{where}: `repository` is the plugin's public source repository (https)")
-    if not plugin.package.startswith("https://"):
-        raise Invalid(f"{where}: `package` is an https URL of the .oiplugin")
-    if not SEMVER.match(plugin.version):
-        raise Invalid(f"{where}: `version` is the package's semver version")
-    if not SHA256.match(plugin.sha256):
-        raise Invalid(f"{where}: `sha256` is the package file's SHA-256, in hex")
-    return plugin
+    tables = t.get("versions")
+    if not isinstance(tables, list) or not tables:
+        raise Invalid(f"{where}: list each published package as a `[[versions]]` table")
+    versions: list[Version] = []
+    for i, v in enumerate(tables):
+        at = f"{where}: [[versions]] {i + 1}"
+        unknown = set(v) - {"version", "package", "sha256"}
+        if unknown:
+            raise Invalid(f"{at}: unknown keys {sorted(unknown)}")
+        version = Version(stem, _string(v, "version", at), _string(v, "package", at), _string(v, "sha256", at).lower())
+        if not SEMVER.match(version.version):
+            raise Invalid(f"{at}: `version` is the package's semver version")
+        if not version.package.startswith("https://"):
+            raise Invalid(f"{at}: `package` is an https URL of the .oiplugin")
+        if not SHA256.match(version.sha256):
+            raise Invalid(f"{at}: `sha256` is the package file's SHA-256, in hex")
+        if any(x.version == version.version for x in versions):
+            raise Invalid(f"{at}: {version.version} is listed twice")
+        versions.append(version)
+    return Plugin(stem, publisher, repository, versions)
 
 
 def parse_revoked(text: str) -> list[dict]:
@@ -239,7 +252,10 @@ def review(base: Registry, head: Registry, changed: list[str], author: str) -> t
             if p.stem not in base.plugins:
                 notes.append(f"new plugin `{p.stem}`")
             elif p.stem in head.plugins:
-                notes.append(f"`{p.stem}` {base.plugins[p.stem].version} → {head.plugins[p.stem].version}")
+                before = {v.version for v in base.plugins[p.stem].versions}
+                after = {v.version for v in head.plugins[p.stem].versions}
+                diff = [f"+{v}" for v in sorted(after - before)] + [f"-{v}" for v in sorted(before - after)]
+                notes.append(f"`{p.stem}` {' '.join(diff) or 'details changed'}")
             else:
                 notes.append(f"`{p.stem}` delisted")
         elif path.endswith(".gitkeep"):
@@ -309,21 +325,21 @@ def cmd_fetch(args) -> int:
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     failed = False
-    for plugin in reg.plugins.values():
-        data = download(f"{args.mirror.rstrip('/')}/{plugin.file}") if args.mirror else None
+    for v in (v for plugin in reg.plugins.values() for v in plugin.versions):
+        data = download(f"{args.mirror.rstrip('/')}/{v.file}") if args.mirror else None
         source = "mirror"
-        if data is None or hashlib.sha256(data).hexdigest() != plugin.sha256:
-            data, source = download(plugin.package), plugin.package
+        if data is None or hashlib.sha256(data).hexdigest() != v.sha256:
+            data, source = download(v.package), v.package
         if data is None:
-            print(f"::error::{plugin.id}: {plugin.package} not found", file=sys.stderr)
+            print(f"::error::{v.id} {v.version}: {v.package} not found", file=sys.stderr)
             failed = True
             continue
-        if hashlib.sha256(data).hexdigest() != plugin.sha256:
-            print(f"::error::{plugin.id}: {plugin.package} doesn't match its sha256", file=sys.stderr)
+        if hashlib.sha256(data).hexdigest() != v.sha256:
+            print(f"::error::{v.id} {v.version}: {v.package} doesn't match its sha256", file=sys.stderr)
             failed = True
             continue
-        (out / plugin.file).write_bytes(data)
-        print(f"{plugin.file} ({source})")
+        (out / v.file).write_bytes(data)
+        print(f"{v.file} ({source})")
     (out / "index.json").write_text(json.dumps(index_skeleton(reg), indent=2) + "\n")
     return 1 if failed else 0
 
