@@ -5,8 +5,12 @@ Each plugin lives in its author's repository; this repository lists who
 publishes what. Its index is merged into OpenIDEA's marketplace (Settings ›
 Plugins › Available) within the hour of a change.
 
-OpenIDEA's official plugins (`openidea.*`) are maintained in the OpenIDEA
-repository, in `plugins/official/`.
+Plugins with real features live in their authors' repositories and are listed
+here. OpenIDEA's `plugins/official/` only holds small sample plugins
+(`openidea.*`) that show how the API is used; they aren't developed further.
+Changes to the plugin API itself (WIT, SDK, host) go to the
+[OpenIDEA repository](https://github.com/l0ng-ai/openidea): open the API PR
+there and link the plugin in your repository that uses it.
 
 ## How it works
 
@@ -115,10 +119,6 @@ users confirm the new key when they next update.
 or `revoked-keys`) for malware, a security problem the owner doesn't fix, or a
 lost key; OpenIDEA then disables them where they are installed. Owners ask for
 it in an issue.
-
-**Becoming official.** A widely useful plugin can move to OpenIDEA's
-`plugins/official/` when its owner and the maintainers agree; it then takes an
-`openidea.*` id.
 
 ## Files
 
