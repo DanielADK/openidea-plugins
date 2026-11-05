@@ -1,0 +1,6 @@
+repository = "https://github.com/jaw52/openidea-catppuccin-theme"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/jaw52/openidea-catppuccin-theme/releases/download/v0.1.0/jaw52.catppuccin-theme-0.1.0.oiplugin"
+sha256 = "7d065551d4967c8e65ed361487ed74ad9d681c5c270ce1789deff53cf17b3287"
