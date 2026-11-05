@@ -1,0 +1,6 @@
+repository = "https://github.com/dengliu/openidea-gitlink"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/dengliu/openidea-gitlink/releases/download/v0.1.0/dengliu.gitlink-0.1.0.oiplugin"
+sha256 = "977590b449554b38a674baaefa1c1dba793d44664389f38d7755a96f013a8c1a"
