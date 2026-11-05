@@ -5,9 +5,9 @@ Each plugin lives in its author's repository; this repository lists who
 publishes what. Its index is merged into OpenIDEA's marketplace (Settings ›
 Plugins › Available) within the hour of a change.
 
-Plugins with real features live in their authors' repositories and are listed
-here. OpenIDEA's `plugins/official/` only holds small sample plugins
-(`openidea.*`) that show how the API is used; they aren't developed further.
+Plugins live in their authors' repositories and are listed here. The plugins
+in OpenIDEA's `plugins/official/` (`openidea.*`) are examples of how to use the
+plugin API, not maintained products; build on them in your own repository.
 Changes to the plugin API itself (WIT, SDK, host) go to the
 [OpenIDEA repository](https://github.com/l0ng-ai/openidea): open the API PR
 there and link the plugin in your repository that uses it.
