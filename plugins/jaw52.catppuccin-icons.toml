@@ -1,0 +1,6 @@
+repository = "https://github.com/jaw52/openidea-catppuccin-icons"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/jaw52/openidea-catppuccin-icons/releases/download/v0.1.0/jaw52.catppuccin-icons-0.1.0.oiplugin"
+sha256 = "2a90f4cbe88c487d32f04e470f7fadc237d7aba0647692c9e6ff7029eafce5ff"
