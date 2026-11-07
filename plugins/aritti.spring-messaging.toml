@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/spring-messaging-v0.1.0/aritti.spring-messaging-0.1.0.oiplugin"
+sha256 = "1df0beee3560872f9564f3dbb24b7b736c6df4b6d9e9dd19423e66275e3ea9b8"
