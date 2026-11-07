@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/spring-modulith-v0.1.0/aritti.spring-modulith-0.1.0.oiplugin"
+sha256 = "1205509207870e1fea04c080817b39c75de7d0295d58c3140eb00bc28adc1a2d"
