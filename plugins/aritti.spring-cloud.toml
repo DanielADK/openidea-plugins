@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/spring-cloud-v0.1.0/aritti.spring-cloud-0.1.0.oiplugin"
+sha256 = "440889b12600ca7ade00df693c0e0e517e3147a0b9cd029633f72babd5c25298"
