@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/twig-v0.1.0/aritti.twig-0.1.0.oiplugin"
+sha256 = "ac273103c32e07030dd8c78ea73c007ebee30f8cb7354d02f54ee4aff636de68"
