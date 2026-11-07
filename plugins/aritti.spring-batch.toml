@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/spring-batch-v0.1.0/aritti.spring-batch-0.1.0.oiplugin"
+sha256 = "b3bd4537ed2685d2daabd78fb85b15a7d17b4a675a470e80ffdd548d17a50635"
