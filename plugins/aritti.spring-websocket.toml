@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/spring-websocket-v0.1.0/aritti.spring-websocket-0.1.0.oiplugin"
+sha256 = "25554bb93749e5ea1e7259eb9db3719b6ea68e0f1b1073485a0a28af3977622a"
