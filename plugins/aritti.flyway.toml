@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/flyway-v0.1.0/aritti.flyway-0.1.0.oiplugin"
+sha256 = "828b6667e4f56e4aef030a6b1c079e2eda3a21cfbb60c798475e647b3eb12a5d"
