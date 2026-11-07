@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/gitlab-v0.1.0/aritti.gitlab-0.1.0.oiplugin"
+sha256 = "2dd2fddb32ffc78c20428a0c6a48708253b0725dbbdf7aa07d6d34de57bb53a1"
