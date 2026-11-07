@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/devcontainer-v0.1.0/aritti.devcontainer-0.1.0.oiplugin"
+sha256 = "2969fd7f2ce8378961e100b85cd374461767c41d8acb3026c989e7e71bc96b30"
