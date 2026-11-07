@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/liquibase-v0.1.0/aritti.liquibase-0.1.0.oiplugin"
+sha256 = "b4f918c5e52cf987fc51e7894ba6908522e858674eec4abd3603c3b40411a384"
