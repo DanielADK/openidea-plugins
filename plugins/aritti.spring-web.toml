@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/spring-web-v0.1.0/aritti.spring-web-0.1.0.oiplugin"
+sha256 = "05365076b7664da3287e9ecb853534c7fdfcb810c74f7dde8a5412c65a23ddde"
