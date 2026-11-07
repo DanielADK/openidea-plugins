@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/spring-security-v0.1.0/aritti.spring-security-0.1.0.oiplugin"
+sha256 = "b902562c9eab20c9bf690c017346b78a8b5c90aa455a3cf2f576e4c6b82abb22"
