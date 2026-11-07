@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/spring-osgi-v0.1.0/aritti.spring-osgi-0.1.0.oiplugin"
+sha256 = "d1180b59c8e4e2d0e662fd4d697823e8d0986ed7f7061fffb3c21675c207527f"
