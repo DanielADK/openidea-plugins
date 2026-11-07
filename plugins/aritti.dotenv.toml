@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/dotenv-v0.1.0/aritti.dotenv-0.1.0.oiplugin"
+sha256 = "64a3baf99a8745824901e993b39344c418ba541834f8a8dd7772058547c049f6"
