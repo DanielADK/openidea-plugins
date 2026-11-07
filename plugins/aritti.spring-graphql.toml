@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/spring-graphql-v0.1.0/aritti.spring-graphql-0.1.0.oiplugin"
+sha256 = "c8a1c58aa83b0f4163fcf49ca8ef310826648a1b82510ecad328960e2e111a4b"
