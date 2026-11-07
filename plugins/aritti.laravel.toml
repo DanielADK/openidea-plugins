@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/laravel-v0.1.0/aritti.laravel-0.1.0.oiplugin"
+sha256 = "458c9df14dfe643df0360f54a73bd727306c07b72b9903053340a014ace06fe9"
