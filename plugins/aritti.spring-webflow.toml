@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/spring-webflow-v0.1.0/aritti.spring-webflow-0.1.0.oiplugin"
+sha256 = "127be0c4373379c5e9967a1001f53c939eeff769f86eafb65db2f50e8410468e"
