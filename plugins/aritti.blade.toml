@@ -1,0 +1,6 @@
+repository = "https://github.com/arnaud-ritti/openidea-plugins"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/arnaud-ritti/openidea-plugins/releases/download/blade-v0.1.0/aritti.blade-0.1.0.oiplugin"
+sha256 = "c2f76b2a37db7afb3f43fa522b7db879b729e4bf5ed0d1727c410a508ef407ec"
