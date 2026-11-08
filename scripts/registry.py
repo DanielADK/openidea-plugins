@@ -22,6 +22,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import tomllib
 import urllib.error
 import urllib.request
@@ -319,15 +320,26 @@ def cmd_validate(args) -> int:
     return 1 if problems else 0
 
 
-def download(url: str) -> bytes | None:
+RETRIES = 4
+
+
+def download(url: str, sleep=time.sleep) -> bytes | None:
+    """The bytes at `url`; None when it is not found. Timeouts and 5xx/429 are retried with backoff."""
     request = urllib.request.Request(url, headers={"User-Agent": "openidea-plugin-registry"})
-    try:
-        with urllib.request.urlopen(request, timeout=60) as r:
-            data = r.read(MAX_PACKAGE + 1)
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            return None
-        raise
+    for attempt in range(RETRIES):
+        try:
+            with urllib.request.urlopen(request, timeout=60) as r:
+                data = r.read(MAX_PACKAGE + 1)
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            if (e.code < 500 and e.code != 429) or attempt == RETRIES - 1:
+                raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt == RETRIES - 1:
+                raise
+        sleep(5 * 3**attempt)
     if len(data) > MAX_PACKAGE:
         raise Invalid(f"{url}: larger than {MAX_PACKAGE >> 20} MiB")
     return data
@@ -362,7 +374,11 @@ def cmd_fetch(args) -> int:
     out.mkdir(parents=True, exist_ok=True)
     failed = False
     for v in (v for plugin in reg.plugins.values() for v in plugin.versions):
-        data = download(f"{args.mirror.rstrip('/')}/{v.file}") if args.mirror else None
+        try:
+            data = download(f"{args.mirror.rstrip('/')}/{v.file}") if args.mirror else None
+        except OSError as e:
+            print(f"::warning::{v.id} {v.version}: mirror unavailable ({e}); using the author's URL", file=sys.stderr)
+            data = None
         source = "mirror"
         if data is None or hashlib.sha256(data).hexdigest() != v.sha256:
             data, source = download(v.package), v.package

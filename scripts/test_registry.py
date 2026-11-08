@@ -1,5 +1,8 @@
 import base64
+import io
 import unittest
+import urllib.error
+from unittest import mock
 
 import registry as r
 
@@ -115,6 +118,38 @@ class Review(unittest.TestCase):
         problems, _ = r.review(self.base, self.base, ["scripts/registry.py", "revoked.toml"], "alice")
         self.assertEqual(len(problems), 2)
 
+
+class DownloadRetry(unittest.TestCase):
+    @staticmethod
+    def reply(code=None, body=b"x"):
+        if code is None:
+            resp = mock.MagicMock()
+            resp.__enter__.return_value.read.return_value = body
+            return resp
+        return urllib.error.HTTPError("u", code, "m", {}, io.BytesIO())
+
+    def run_download(self, outcomes):
+        sleeps = []
+        with mock.patch("urllib.request.urlopen", side_effect=outcomes):
+            return r.download("https://example.com/p", sleep=sleeps.append), sleeps
+
+    def test_retries_a_gateway_timeout(self):
+        data, sleeps = self.run_download([self.reply(504), self.reply(502), self.reply()])
+        self.assertEqual(data, b"x")
+        self.assertEqual(len(sleeps), 2)
+
+    def test_not_found_is_none_without_retry(self):
+        data, sleeps = self.run_download([self.reply(404)])
+        self.assertIsNone(data)
+        self.assertEqual(sleeps, [])
+
+    def test_client_errors_are_not_retried(self):
+        with self.assertRaises(urllib.error.HTTPError):
+            self.run_download([self.reply(403)])
+
+    def test_gives_up_after_the_last_attempt(self):
+        with self.assertRaises(urllib.error.HTTPError):
+            self.run_download([self.reply(504)] * r.RETRIES)
 
 if __name__ == "__main__":
     unittest.main()
