@@ -1,0 +1,6 @@
+repository = "https://github.com/dengliu/openidea-kubernetes"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/dengliu/openidea-kubernetes/releases/download/v0.1.0/dengliu.kubernetes-0.1.0.oiplugin"
+sha256 = "08de08b76c6d38cf9769fc0a8dd336658ed6ccc3850b4161122e171ffc563d52"
