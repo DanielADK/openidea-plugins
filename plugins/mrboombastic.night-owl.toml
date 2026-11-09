@@ -9,3 +9,8 @@ sha256 = "b9fddcfa5dc4a64a175620e0bb75a6a3ac50fd80f8306931af0e33c6dcd3e728"
 version = "1.0.1"
 package = "https://github.com/MrBoombastic/OpenIDEA-NightOwl/releases/download/v1.0.1/mrboombastic.night-owl-1.0.1.oiplugin"
 sha256 = "ec3f7d887bdadba8ac29fcf1aa6c38f441b70047b361abd4eb79066f8f684482"
+
+[[versions]]
+version = "1.0.2"
+package = "https://github.com/MrBoombastic/OpenIDEA-NightOwl/releases/download/v1.0.2/mrboombastic.night-owl-1.0.2.oiplugin"
+sha256 = "82eee4b5513cc415fd773d90d9c8be390be530046626654b7452c3d427b42633"
