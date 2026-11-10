@@ -4,3 +4,8 @@ repository = "https://github.com/dengliu/openidea-excalidraw"
 version = "0.1.0"
 package = "https://github.com/dengliu/openidea-excalidraw/releases/download/v0.1.0/dengliu.excalidraw-0.1.0.oiplugin"
 sha256 = "60f85710ba71db01c93f4d67b16a7f1bee26fb65816df4eab2e657fe89698736"
+
+[[versions]]
+version = "0.2.0"
+package = "https://github.com/dengliu/openidea-excalidraw/releases/download/v0.2.0/dengliu.excalidraw-0.2.0.oiplugin"
+sha256 = "55be78e0c0700aa1ef6e7070a105ab647ad67377f5503c88a73c9d55712a62be"
