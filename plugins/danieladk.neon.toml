@@ -1,0 +1,6 @@
+repository = "https://github.com/DanielADK/openidea-neon"
+
+[[versions]]
+version = "0.1.0"
+package = "https://github.com/DanielADK/openidea-neon/releases/download/v0.1.0/danieladk.neon-0.1.0.oiplugin"
+sha256 = "530b3c05353e91fe7b3b180c876048a48fb04f84de63312ed0eda30a18788178"
